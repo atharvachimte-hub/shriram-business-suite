@@ -6,7 +6,7 @@ import {
   ArrowRightLeft, Wallet, Printer, X, RefreshCw, ChevronDown
 } from 'lucide-react';
 
-// लोगो इम्पोर्ट (तुमच्या फोल्डरनुसार .png सेट केला आहे)
+// लोगो इम्पोर्ट
 import logo from './shriram-logo.png'; 
 
 const App = () => {
@@ -21,7 +21,6 @@ const App = () => {
     location: "Pune, Maharashtra",
   };
 
-  // डेटाबेस लॉजिक
   const [clientData, setClientData] = useState(() => {
     const saved = localStorage.getItem('srd_pro_db');
     return saved ? JSON.parse(saved) : {
@@ -134,7 +133,7 @@ const App = () => {
             <table className="w-full text-left">
               <thead>
                 <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-200">
-                  <th className="pb-5 px-4 text-orange-600 tracking-tighter">Item Description (तपशील)</th>
+                  <th className="pb-5 px-4 text-orange-600">Description (तपशील)</th>
                   <th className="pb-5 text-center">Nag (Qty)</th>
                   <th className="pb-5 text-center">Dar (Rate)</th>
                   <th className="pb-3 text-right pr-6">Ekun (Amount)</th>
@@ -142,7 +141,7 @@ const App = () => {
               </thead>
               <tbody>
                 {clientData.items.map((item, idx) => (
-                  <tr key={idx} className="animate-in slide-in-from-bottom-2">
+                  <tr key={idx}>
                     <td className="py-4 px-2"> <input type="text" placeholder="Service Name" value={item.desc} onChange={(e)=>updateItem(idx, 'desc', e.target.value)} className="w-full p-4 rounded-2xl bg-white border border-slate-100 shadow-sm font-bold outline-none" /> </td>
                     <td className="py-4 w-24 text-center"> <input type="number" value={item.qty} onChange={(e)=>updateItem(idx, 'qty', e.target.value)} className="w-16 p-4 rounded-2xl bg-white border border-slate-100 text-center font-black outline-none shadow-sm" /> </td>
                     <td className="py-4 w-32 text-center"> <input type="number" value={item.rate} onChange={(e)=>updateItem(idx, 'rate', e.target.value)} className="w-24 p-4 rounded-2xl bg-white border border-slate-100 text-center font-black text-orange-600 outline-none shadow-sm" /> </td>
@@ -151,7 +150,7 @@ const App = () => {
                 ))}
               </tbody>
             </table>
-            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={addItem} className="mt-8 flex items-center gap-2 text-orange-600 font-black text-[10px] bg-white px-8 py-3 rounded-full border border-orange-100 shadow-lg uppercase tracking-widest"> <Plus size={16} /> Add Row </motion.button>
+            <button onClick={addItem} className="mt-8 flex items-center gap-2 text-orange-600 font-black text-[10px] bg-white px-8 py-3 rounded-full border border-orange-100 shadow-lg uppercase tracking-widest"> <Plus size={16} /> Add Row </button>
           </div>
 
           <div className="flex flex-col md:flex-row justify-between items-center pt-10 border-t border-slate-50 gap-10">
@@ -166,10 +165,10 @@ const App = () => {
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-16">
-            <motion.button whileHover={{ y: -5 }} onClick={() => setClientData({...clientData, items:[{desc:'',qty:1,rate:0}], name:'', company:''})} className="p-5 rounded-3xl bg-slate-100 text-slate-400 font-bold flex items-center justify-center gap-2 transition-all"> <Trash2 size={18} /> Reset </motion.button>
-            <motion.button whileHover={{ y: -5 }} className="p-5 rounded-3xl bg-slate-100 text-slate-400 font-bold flex items-center justify-center gap-2 transition-all"> <FileSpreadsheet size={18} /> Excel </motion.button>
-            <motion.button whileHover={{ y: -5, scale: 1.02 }} onClick={() => setShowPreview(true)} className="p-6 rounded-[2.5rem] bg-black text-white font-black shadow-2xl flex items-center justify-center gap-4"> <Printer size={20} /> Preview Bill </motion.button>
-            <motion.button whileHover={{ y: -5, scale: 1.02 }} onClick={() => window.open(`https://wa.me/?text=नमस्कार ${clientData.name}, तुमच्या ${activeTab} ची एकूण रक्कम ₹${finalTotal} आहे. - श्री राम डिजिटल`)} className="p-6 rounded-[2.5rem] bg-[#25D366] text-white font-black shadow-2xl flex items-center justify-center gap-4"> <Send size={20} /> WhatsApp </motion.button>
+            <button onClick={() => setClientData({...clientData, items:[{desc:'',qty:1,rate:0}], name:'', company:''})} className="p-5 rounded-3xl bg-slate-100 text-slate-400 font-bold flex items-center justify-center gap-2"> <Trash2 size={18} /> Reset </button>
+            <button className="p-5 rounded-3xl bg-slate-100 text-slate-400 font-bold flex items-center justify-center gap-2"> <FileSpreadsheet size={18} /> Excel </button>
+            <button onClick={() => setShowPreview(true)} className="p-6 rounded-[2.5rem] bg-black text-white font-black shadow-2xl flex items-center justify-center gap-4"> <Printer size={20} /> Preview Bill </button>
+            <button onClick={() => window.open(`https://wa.me/?text=नमस्कार ${clientData.name}, तुमच्या ${activeTab} ची एकूण रक्कम ₹${finalTotal} आहे. - श्री राम डिजिटल`)} className="p-6 rounded-[2.5rem] bg-[#25D366] text-white font-black shadow-2xl flex items-center justify-center gap-4"> <Send size={20} /> WhatsApp </button>
           </div>
         </motion.div>
       </div>
@@ -178,8 +177,9 @@ const App = () => {
         {showPreview && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/90 backdrop-blur-xl z-[2000] flex items-center justify-center p-6 overflow-y-auto">
             <div className="bg-white w-full max-w-4xl rounded-[4rem] shadow-2xl relative my-auto">
-              <button onClick={() => setShowPreview(false)} className="absolute top-10 right-10 p-4 bg-slate-100 rounded-full hover:bg-red-50 hover:text-red-500"> <X size={24} /> </button>
-              <div className="p-20" id="print-bill">
+              <button onClick={() => setShowPreview(false)} className="absolute top-10 right-10 p-4 bg-slate-100 rounded-full hover:bg-red-50 hover:text-red-500 no-print"> <X size={24} /> </button>
+              
+              <div className="p-20" id="print-area">
                 <div className="flex justify-between items-center mb-16 border-b-8 border-slate-50 pb-12">
                   <div className="flex items-center gap-8">
                     <img src={logo} alt="Logo" className="w-24 h-24 object-contain bg-black rounded-3xl p-1 shadow-2xl border-2 border-orange-500" />
@@ -188,8 +188,8 @@ const App = () => {
                   <div className="text-right"> <h3 className="text-6xl font-black text-orange-600/10 uppercase italic tracking-tighter mb-[-10px]">{activeTab}</h3> <p className="text-sm font-black text-slate-800 tracking-widest">#{clientData.docId} | {clientData.date}</p> </div>
                 </div>
 
-                <div className="mb-12 grid grid-cols-2 gap-10">
-                    <div className="p-10 bg-slate-50 rounded-[3rem] border-l-[15px] border-orange-600">
+                <div className="mb-12">
+                    <div className="p-10 bg-slate-50 rounded-[3rem] border-l-[15px] border-orange-600 w-1/2">
                         <p className="text-[10px] font-black text-slate-300 uppercase mb-3 tracking-[0.3em]">Client Bill To:</p>
                         <h4 className="font-black text-slate-800 text-3xl tracking-tight uppercase italic">{clientData.name || '---'}</h4>
                         <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">{clientData.company}</p>
@@ -225,13 +225,26 @@ const App = () => {
                   </div>
                 </div>
               </div>
-              <div className="bg-slate-50 p-10 flex justify-center">
-                <motion.button whileHover={{ scale: 1.05 }} onClick={() => window.print()} className="bg-black text-white px-16 py-6 rounded-[2.5rem] font-black text-xs uppercase tracking-widest flex items-center gap-5 shadow-2xl"> <Printer size={20} /> PRINT OR SAVE PDF </motion.button>
+
+              {/* PRINT BUTTON - NO PRINT CLASS ADDED */}
+              <div className="bg-slate-50 p-10 flex justify-center no-print">
+                <button onClick={() => window.print()} className="bg-black text-white px-16 py-6 rounded-[2.5rem] font-black text-xs uppercase tracking-widest flex items-center gap-5 shadow-2xl"> <Printer size={20} /> PRINT OR SAVE PDF </button>
               </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      <style>
+        {`
+          @media print {
+            .no-print { display: none !important; }
+            body { background: white !important; margin: 0; padding: 0; }
+            #print-area { padding: 0 !important; margin: 0 !important; width: 100% !important; }
+            .fixed { position: static !important; }
+          }
+        `}
+      </style>
     </motion.div>
   );
 };
