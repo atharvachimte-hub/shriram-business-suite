@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Search, Trash2, Edit, FileText, ArrowRight } from 'lucide-react';
+import { Search, Trash2, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const History = () => {
