@@ -78,7 +78,7 @@ const Leads = () => {
         setCurrentLead(prev => ({ ...prev, customMessage: newMsg }));
       }
     }
-  }, [currentLead.clientType, currentLead.messageTemplate, currentLead.name, currentLead.service, currentLead.offer, currentLead.nextFollowUp, showModal, isMessageEdited]);
+  }, [currentLead.clientType, currentLead.messageTemplate, currentLead.name, currentLead.service, currentLead.offer, currentLead.nextFollowUp, showModal, isMessageEdited, currentLead]);
 
   const saveLeads = (newLeads) => {
     setLeads(newLeads);
