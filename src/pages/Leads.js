@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Search, Trash2, Edit, MessageCircle, Calendar, LayoutGrid, List } from 'lucide-react';
+import { Plus, Search, Trash2, Edit, MessageCircle, Calendar, LayoutGrid, List, Download, Database } from 'lucide-react';
 
 const Leads = () => {
   const [leads, setLeads] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [clientTypeFilter, setClientTypeFilter] = useState('All');
+  const [groupByType, setGroupByType] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const clientTypes = ['All', 'Real Estate', 'Digital Marketing', 'Dentist', 'Coaching', 'AI Course', 'Generic'];
   const [viewMode, setViewMode] = useState('list'); // 'list' or 'pipeline'
   const [currentLead, setCurrentLead] = useState({ 
     id: '', name: '', phone: '', status: 'New', notes: '', 
@@ -148,10 +151,35 @@ const Leads = () => {
     saveLeads(newLeads);
   };
 
-  const filteredLeads = leads.filter(l => 
-    l.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    l.phone.includes(searchTerm)
-  );
+  const filteredLeads = leads.filter(l => {
+    const matchesSearch = l.name.toLowerCase().includes(searchTerm.toLowerCase()) || l.phone.includes(searchTerm);
+    const matchesType = clientTypeFilter === 'All' || l.clientType === clientTypeFilter;
+    return matchesSearch && matchesType;
+  });
+
+  const exportToCSV = () => {
+    if (leads.length === 0) return alert('No leads to export');
+    const headers = ['name', 'phone', 'status', 'nextFollowUp', 'clientType', 'leadSource', 'priority', 'service', 'offer', 'notes'];
+    const csvContent = [
+      headers.join(','),
+      ...leads.map(lead => headers.map(header => `"${(lead[header] || '').replace(/"/g, '""')}"`).join(','))
+    ].join('\\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `srd_leads_export_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+  };
+
+  const backupJSON = () => {
+    if (leads.length === 0) return alert('No leads to backup');
+    const dataStr = JSON.stringify(leads, null, 2);
+    const blob = new Blob([dataStr], { type: 'application/json' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `srd_leads_backup_${new Date().toISOString().split('T')[0]}.json`;
+    link.click();
+  };
 
   const getStatusColor = (status) => {
     switch(status) {
@@ -165,6 +193,67 @@ const Leads = () => {
 
   const stages = ['New', 'Contacted', 'Converted', 'Lost'];
 
+  const renderTable = (leadsData) => (
+    <div className="overflow-x-auto bg-white rounded-2xl shadow-sm border border-slate-50">
+      <table className="w-full text-left">
+        <thead>
+          <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 bg-slate-50/50">
+            <th className="pb-4 px-4 pt-4">Lead Info</th>
+            <th className="pb-4 px-4 pt-4">Status</th>
+            <th className="pb-4 px-4 pt-4">Follow-up</th>
+            <th className="pb-4 px-4 pt-4 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {leadsData.length === 0 ? (
+            <tr><td colSpan="4" className="py-8 text-center text-slate-400 font-bold">No leads found.</td></tr>
+          ) : (
+            leadsData.map(lead => (
+              <tr key={lead.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                <td className="py-4 px-4">
+                  <div className="flex gap-2 items-center">
+                    <p className="font-black text-slate-800 text-lg uppercase italic">{lead.name}</p>
+                    {lead.priority && (
+                      <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-md ${
+                        lead.priority === 'Hot' ? 'bg-red-100 text-red-600' :
+                        lead.priority === 'Warm' ? 'bg-orange-100 text-orange-600' :
+                        'bg-blue-100 text-blue-600'
+                      }`}>{lead.priority}</span>
+                    )}
+                  </div>
+                  <p className="text-xs font-bold text-slate-500">{lead.phone}</p>
+                </td>
+                <td className="py-4 px-4">
+                  <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${getStatusColor(lead.status)}`}>
+                    {lead.status}
+                  </span>
+                </td>
+                <td className="py-4 px-4">
+                  {lead.nextFollowUp ? (
+                    <div className="flex items-center gap-2 text-xs font-bold text-orange-600 bg-orange-50 px-3 py-1 rounded-lg w-max">
+                      <Calendar size={12} /> {new Date(lead.nextFollowUp).toLocaleDateString()}
+                    </div>
+                  ) : <span className="text-xs font-bold text-slate-400">-</span>}
+                </td>
+                <td className="py-4 px-4 flex justify-end gap-2">
+                  <button onClick={() => sendWhatsApp(lead)} className="p-2 bg-green-50 text-green-600 rounded-xl hover:bg-green-600 hover:text-white transition-all shadow-sm" title="Send WhatsApp">
+                    <MessageCircle size={16} />
+                  </button>
+                  <button onClick={() => { setIsMessageEdited(!!lead.customMessage); setCurrentLead(lead); setShowModal(true); }} className="p-2 bg-slate-100 text-slate-600 rounded-xl hover:bg-blue-50 hover:text-blue-600 transition-colors">
+                    <Edit size={16} />
+                  </button>
+                  <button onClick={() => handleDelete(lead.id)} className="p-2 bg-slate-100 text-slate-600 rounded-xl hover:bg-red-50 hover:text-red-600 transition-colors">
+                    <Trash2 size={16} />
+                  </button>
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-7xl mx-auto pb-10">
       <div className="flex justify-between items-center mb-8">
@@ -172,9 +261,24 @@ const Leads = () => {
           <h1 className="text-4xl font-black text-slate-800 tracking-tighter uppercase italic">
             Leads <span className="text-orange-600">.</span>
           </h1>
-          <p className="text-slate-400 font-bold text-xs tracking-widest uppercase mt-2">Manage Prospects & Pipeline</p>
+          <div className="flex items-center gap-3 mt-2">
+            <p className="text-slate-400 font-bold text-xs tracking-widest uppercase">Manage Prospects & Pipeline</p>
+            <span className="bg-green-100 text-green-600 text-[9px] font-black uppercase px-2 py-0.5 rounded-md flex items-center gap-1 shadow-sm border border-green-200">
+              <Database size={10} /> Data Backup Ready
+            </span>
+          </div>
         </div>
-        <div className="flex gap-4">
+        <div className="flex items-center gap-4">
+          <div className="flex bg-slate-50 p-1 rounded-2xl border border-slate-100 shadow-sm">
+            <button onClick={exportToCSV} className="flex items-center gap-1 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:text-green-600 hover:bg-white rounded-xl transition-all" title="Export Excel (.csv)">
+              <Download size={14} /> CSV
+            </button>
+            <div className="w-px bg-slate-200 my-1"></div>
+            <button onClick={backupJSON} className="flex items-center gap-1 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:text-blue-600 hover:bg-white rounded-xl transition-all" title="Backup JSON">
+              <Database size={14} /> JSON
+            </button>
+          </div>
+
           <div className="flex bg-white rounded-2xl p-1 shadow-sm border border-slate-100">
             <button onClick={() => setViewMode('list')} className={`p-2 rounded-xl transition-all ${viewMode === 'list' ? 'bg-slate-100 text-slate-800' : 'text-slate-400 hover:text-slate-600'}`}>
               <List size={20} />
@@ -194,75 +298,82 @@ const Leads = () => {
 
       <div className="bg-white p-8 rounded-[3rem] shadow-xl border border-white">
         <div className="flex items-center gap-4 mb-8 bg-slate-50 p-4 rounded-3xl">
-          <Search className="text-slate-400 ml-2" size={20} />
-          <input 
-            type="text" 
-            placeholder="Search leads by name or phone..." 
-            className="bg-transparent border-none outline-none w-full font-bold text-slate-700"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+          <div className="flex-1 flex items-center gap-4">
+            <Search className="text-slate-400 ml-2" size={20} />
+            <input 
+              type="text" 
+              placeholder="Search leads by name or phone..." 
+              className="bg-transparent border-none outline-none w-full font-bold text-slate-700"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          <div className="w-px h-8 bg-slate-200"></div>
+          <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl shadow-sm border border-slate-100">
+            <select 
+              value={clientTypeFilter}
+              onChange={(e) => setClientTypeFilter(e.target.value)}
+              className="bg-transparent border-none outline-none font-bold text-slate-600 text-sm cursor-pointer"
+            >
+              {clientTypes.map(type => (
+                <option key={type} value={type}>{type === 'All' ? 'All Client Types' : type}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Quick Filter Chips */}
+        <div className="flex flex-wrap gap-2 mb-6">
+          {clientTypes.map(type => {
+            const count = type === 'All' ? leads.length : leads.filter(l => l.clientType === type).length;
+            const isSelected = clientTypeFilter === type;
+            return (
+              <button
+                key={type}
+                onClick={() => setClientTypeFilter(type)}
+                className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 shadow-sm ${
+                  isSelected 
+                    ? 'bg-orange-100 text-orange-600 border border-orange-200' 
+                    : 'bg-white text-slate-400 border border-slate-100 hover:bg-slate-50 hover:text-slate-600'
+                }`}
+              >
+                {type}
+                <span className={`px-2 py-0.5 rounded-md text-[10px] ${
+                  isSelected ? 'bg-orange-200 text-orange-700' : 'bg-slate-100 text-slate-500'
+                }`}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+          
+          <div className="ml-auto flex items-center gap-2 bg-white px-4 py-2 rounded-xl border border-slate-100 shadow-sm">
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={groupByType} onChange={e => setGroupByType(e.target.checked)} className="w-4 h-4 accent-orange-500" />
+              Group View
+            </label>
+          </div>
         </div>
 
         {viewMode === 'list' ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
-                  <th className="pb-4 px-4">Lead Info</th>
-                  <th className="pb-4 px-4">Status</th>
-                  <th className="pb-4 px-4">Follow-up</th>
-                  <th className="pb-4 px-4 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredLeads.length === 0 ? (
-                  <tr><td colSpan="4" className="py-8 text-center text-slate-400 font-bold">No leads found.</td></tr>
-                ) : (
-                  filteredLeads.map(lead => (
-                    <tr key={lead.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
-                      <td className="py-4 px-4">
-                        <div className="flex gap-2 items-center">
-                          <p className="font-black text-slate-800 text-lg uppercase italic">{lead.name}</p>
-                          {lead.priority && (
-                            <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-md ${
-                              lead.priority === 'Hot' ? 'bg-red-100 text-red-600' :
-                              lead.priority === 'Warm' ? 'bg-orange-100 text-orange-600' :
-                              'bg-blue-100 text-blue-600'
-                            }`}>{lead.priority}</span>
-                          )}
-                        </div>
-                        <p className="text-xs font-bold text-slate-500">{lead.phone}</p>
-                      </td>
-                      <td className="py-4 px-4">
-                        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${getStatusColor(lead.status)}`}>
-                          {lead.status}
-                        </span>
-                      </td>
-                      <td className="py-4 px-4">
-                        {lead.nextFollowUp ? (
-                          <div className="flex items-center gap-2 text-xs font-bold text-orange-600 bg-orange-50 px-3 py-1 rounded-lg w-max">
-                            <Calendar size={12} /> {new Date(lead.nextFollowUp).toLocaleDateString()}
-                          </div>
-                        ) : <span className="text-xs font-bold text-slate-400">-</span>}
-                      </td>
-                      <td className="py-4 px-4 flex justify-end gap-2">
-                        <button onClick={() => sendWhatsApp(lead)} className="p-2 bg-green-50 text-green-600 rounded-xl hover:bg-green-600 hover:text-white transition-all shadow-sm" title="Send WhatsApp">
-                          <MessageCircle size={16} />
-                        </button>
-                        <button onClick={() => { setIsMessageEdited(!!lead.customMessage); setCurrentLead(lead); setShowModal(true); }} className="p-2 bg-slate-100 text-slate-600 rounded-xl hover:bg-blue-50 hover:text-blue-600 transition-colors">
-                          <Edit size={16} />
-                        </button>
-                        <button onClick={() => handleDelete(lead.id)} className="p-2 bg-slate-100 text-slate-600 rounded-xl hover:bg-red-50 hover:text-red-600 transition-colors">
-                          <Trash2 size={16} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+          groupByType ? (
+            <div className="space-y-8">
+              {clientTypes.filter(type => type !== 'All').filter(type => clientTypeFilter === 'All' || clientTypeFilter === type).map(type => {
+                const typeLeads = filteredLeads.filter(l => l.clientType === type);
+                if (typeLeads.length === 0) return null;
+                return (
+                  <div key={type} className="bg-slate-50 rounded-3xl p-6 border border-slate-100">
+                    <h3 className="text-lg font-black text-slate-700 uppercase italic mb-4 flex items-center gap-2">
+                      {type} <span className="bg-white text-slate-400 text-xs px-2 py-1 rounded-lg border border-slate-100 not-italic shadow-sm">{typeLeads.length}</span>
+                    </h3>
+                    {renderTable(typeLeads)}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            renderTable(filteredLeads)
+          )
         ) : (
           <div className="flex gap-6 overflow-x-auto pb-4">
             {stages.map(stage => (
