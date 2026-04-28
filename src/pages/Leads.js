@@ -157,19 +157,22 @@ const Leads = () => {
     return matchesSearch && matchesType;
   });
 
-  const exportToCSV = () => {
-    if (leads.length === 0) return alert('No leads to export');
+  const handleExportCSV = (data, prefix) => {
+    if (data.length === 0) return alert('No leads to export');
     const headers = ['name', 'phone', 'status', 'nextFollowUp', 'clientType', 'leadSource', 'priority', 'service', 'offer', 'notes'];
     const csvContent = [
       headers.join(','),
-      ...leads.map(lead => headers.map(header => `"${(lead[header] || '').replace(/"/g, '""')}"`).join(','))
-    ].join('\\n');
+      ...data.map(lead => headers.map(header => `"${String(lead[header] || '').replace(/"/g, '""')}"`).join(','))
+    ].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = `srd_leads_export_${new Date().toISOString().split('T')[0]}.csv`;
+    link.download = `${prefix}_${new Date().toISOString().split('T')[0]}.csv`;
     link.click();
   };
+
+  const exportAllToCSV = () => handleExportCSV(leads, 'srd_leads_all');
+  const exportFilteredToCSV = () => handleExportCSV(filteredLeads, 'srd_leads_filtered');
 
   const backupJSON = () => {
     if (leads.length === 0) return alert('No leads to backup');
@@ -270,11 +273,15 @@ const Leads = () => {
         </div>
         <div className="flex items-center gap-4">
           <div className="flex bg-slate-50 p-1 rounded-2xl border border-slate-100 shadow-sm">
-            <button onClick={exportToCSV} className="flex items-center gap-1 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:text-green-600 hover:bg-white rounded-xl transition-all" title="Export Excel (.csv)">
-              <Download size={14} /> CSV
+            <button onClick={exportAllToCSV} className="flex items-center gap-1 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:text-green-600 hover:bg-white rounded-xl transition-all" title="Export All to CSV">
+              <Download size={14} /> All
             </button>
             <div className="w-px bg-slate-200 my-1"></div>
-            <button onClick={backupJSON} className="flex items-center gap-1 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:text-blue-600 hover:bg-white rounded-xl transition-all" title="Backup JSON">
+            <button onClick={exportFilteredToCSV} className="flex items-center gap-1 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:text-blue-600 hover:bg-white rounded-xl transition-all" title="Export Filtered to CSV">
+              <Download size={14} /> Filtered
+            </button>
+            <div className="w-px bg-slate-200 my-1"></div>
+            <button onClick={backupJSON} className="flex items-center gap-1 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:text-purple-600 hover:bg-white rounded-xl transition-all" title="Backup JSON">
               <Database size={14} /> JSON
             </button>
           </div>
