@@ -13,7 +13,7 @@ const Leads = () => {
   const [viewMode, setViewMode] = useState('list'); // 'list' or 'pipeline'
   const [currentLead, setCurrentLead] = useState({ 
     id: '', name: '', phone: '', status: 'New', notes: '', 
-    nextFollowUp: '', lastContacted: '', clientType: 'Generic', leadSource: 'Organic', priority: 'Warm', messageTemplate: 'Intro', service: '', offer: '', customMessage: ''
+    followup: '', lastContacted: '', clientType: 'Generic', source: 'Organic', priority: 'Warm', messageTemplate: 'Intro', service: '', offer: '', customMessage: ''
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isSupabaseConnected, setIsSupabaseConnected] = useState(true);
@@ -67,7 +67,7 @@ const Leads = () => {
       .replace(/{name}/g, lead.name || '[नाव]')
       .replace(/{service}/g, lead.service || '[सर्व्हिस]')
       .replace(/{offer}/g, lead.offer || '[ऑफर]')
-      .replace(/{followup_date}/g, lead.nextFollowUp ? new Date(lead.nextFollowUp).toLocaleDateString() : '[तारीख]');
+      .replace(/{followup_date}/g, lead.followup ? new Date(lead.followup).toLocaleDateString() : '[तारीख]');
   };
 
   const [isMessageEdited, setIsMessageEdited] = useState(false);
@@ -127,7 +127,20 @@ const Leads = () => {
 
   const syncLeadToSupabase = async (lead) => {
     try {
-      const { error } = await supabase.from('leads').upsert(lead);
+      const payload = {
+        id: lead.id,
+        name: lead.name,
+        phone: lead.phone,
+        status: lead.status,
+        followup: lead.followup ? lead.followup : null,
+        clientType: lead.clientType,
+        source: lead.source,
+        priority: lead.priority,
+        service: lead.service,
+        offer: lead.offer,
+        notes: lead.notes
+      };
+      const { error } = await supabase.from('leads').upsert(payload);
       if (error) throw error;
       setIsSupabaseConnected(true);
     } catch (error) {
@@ -143,7 +156,7 @@ const Leads = () => {
         setCurrentLead(prev => ({ ...prev, customMessage: newMsg }));
       }
     }
-  }, [currentLead.clientType, currentLead.messageTemplate, currentLead.name, currentLead.service, currentLead.offer, currentLead.nextFollowUp, showModal, isMessageEdited, currentLead]);
+  }, [currentLead.clientType, currentLead.messageTemplate, currentLead.name, currentLead.service, currentLead.offer, currentLead.followup, showModal, isMessageEdited, currentLead]);
 
   const saveLeads = (newLeads) => {
     setLeads(newLeads);
@@ -171,7 +184,7 @@ const Leads = () => {
     syncLeadToSupabase(leadToSave);
     
     setShowModal(false);
-    setCurrentLead({ id: '', name: '', phone: '', status: 'New', notes: '', nextFollowUp: '', lastContacted: '', clientType: 'Generic', leadSource: 'Organic', priority: 'Warm', messageTemplate: 'Intro', service: '', offer: '', customMessage: '' });
+    setCurrentLead({ id: '', name: '', phone: '', status: 'New', notes: '', followup: '', lastContacted: '', clientType: 'Generic', source: 'Organic', priority: 'Warm', messageTemplate: 'Intro', service: '', offer: '', customMessage: '' });
   };
 
   const handleDelete = async (id) => {
@@ -207,7 +220,7 @@ const Leads = () => {
         const nextDate = new window.Date();
         nextDate.setDate(nextDate.getDate() + 3); // Default 3 days
         
-        const finalLead = { ...updatedLead, nextFollowUp: nextDate.toISOString().split('T')[0] };
+        const finalLead = { ...updatedLead, followup: nextDate.toISOString().split('T')[0] };
         const finalLeads = updatedLeads.map(l => l.id === lead.id ? finalLead : l);
         saveLeads(finalLeads);
         syncLeadToSupabase(finalLead);
@@ -232,7 +245,7 @@ const Leads = () => {
 
   const handleExportCSV = (data, prefix) => {
     if (data.length === 0) return alert('No leads to export');
-    const headers = ['name', 'phone', 'status', 'nextFollowUp', 'clientType', 'leadSource', 'priority', 'service', 'offer', 'notes'];
+    const headers = ['name', 'phone', 'status', 'followup', 'clientType', 'source', 'priority', 'service', 'offer', 'notes'];
     const csvContent = [
       headers.join(','),
       ...data.map(lead => headers.map(header => `"${String(lead[header] || '').replace(/"/g, '""')}"`).join(','))
@@ -305,9 +318,9 @@ const Leads = () => {
                   </span>
                 </td>
                 <td className="py-4 px-4">
-                  {lead.nextFollowUp ? (
+                  {lead.followup ? (
                     <div className="flex items-center gap-2 text-xs font-bold text-orange-600 bg-orange-50 px-3 py-1 rounded-lg w-max">
-                      <Calendar size={12} /> {new Date(lead.nextFollowUp).toLocaleDateString()}
+                      <Calendar size={12} /> {new Date(lead.followup).toLocaleDateString()}
                     </div>
                   ) : <span className="text-xs font-bold text-slate-400">-</span>}
                 </td>
@@ -382,7 +395,7 @@ const Leads = () => {
             </button>
           </div>
           <button 
-            onClick={() => { setIsMessageEdited(false); setCurrentLead({ id: '', name: '', phone: '', status: 'New', notes: '', nextFollowUp: '', lastContacted: '', clientType: 'Generic', leadSource: 'Organic', priority: 'Warm', messageTemplate: 'Intro', service: '', offer: '', customMessage: '' }); setShowModal(true); }}
+            onClick={() => { setIsMessageEdited(false); setCurrentLead({ id: '', name: '', phone: '', status: 'New', notes: '', followup: '', lastContacted: '', clientType: 'Generic', source: 'Organic', priority: 'Warm', messageTemplate: 'Intro', service: '', offer: '', customMessage: '' }); setShowModal(true); }}
             className="bg-orange-600 text-white px-6 py-3 rounded-2xl text-xs font-black flex items-center gap-2 shadow-lg shadow-orange-200 uppercase hover:scale-105 transition-all"
           >
             <Plus size={16} /> New Lead
@@ -499,9 +512,9 @@ const Leads = () => {
                       </div>
                       <p className="text-xs font-bold text-slate-500 mb-3">{lead.phone}</p>
                       
-                      {lead.nextFollowUp && (
+                      {lead.followup && (
                         <div className="flex items-center gap-1 text-[10px] font-black text-orange-600 bg-orange-50 px-2 py-1 rounded-lg mb-4 w-max">
-                          <Calendar size={10} /> Due: {new Date(lead.nextFollowUp).toLocaleDateString()}
+                          <Calendar size={10} /> Due: {new Date(lead.followup).toLocaleDateString()}
                         </div>
                       )}
 
@@ -553,7 +566,7 @@ const Leads = () => {
               </div>
               <div>
                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Next Follow-up Date</label>
-                <input type="date" value={currentLead.nextFollowUp} onChange={e => setCurrentLead({...currentLead, nextFollowUp: e.target.value})} className="w-full p-4 rounded-2xl bg-slate-50 border-none outline-none font-bold text-slate-500" />
+                <input type="date" value={currentLead.followup} onChange={e => setCurrentLead({...currentLead, followup: e.target.value})} className="w-full p-4 rounded-2xl bg-slate-50 border-none outline-none font-bold text-slate-500" />
               </div>
             </div>
 
@@ -566,7 +579,7 @@ const Leads = () => {
               </div>
               <div>
                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Lead Source</label>
-                <select value={currentLead.leadSource} onChange={e => setCurrentLead({...currentLead, leadSource: e.target.value})} className="w-full p-4 rounded-2xl bg-slate-50 border-none outline-none font-bold appearance-none">
+                <select value={currentLead.source} onChange={e => setCurrentLead({...currentLead, source: e.target.value})} className="w-full p-4 rounded-2xl bg-slate-50 border-none outline-none font-bold appearance-none">
                   {['Meta Ads', 'WhatsApp', 'Referral', 'Organic', 'Outreach'].map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
