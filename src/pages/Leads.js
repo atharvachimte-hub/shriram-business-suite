@@ -94,14 +94,12 @@ const Leads = () => {
   }, []);
 
   const fetchLeads = async () => {
-    setIsLoading(true);
-    try {
-      const { data } = await supabase.from('leads').select('*').order('created_at', { ascending: false });
-      setLeads(data || []);
-    } catch (error) {
-      console.error('Error fetching leads:', error);
-    } finally {
-      setIsLoading(false);
+    const { data, error } = await supabase
+      .from('leads')
+      .select('*');
+
+    if (!error) {
+      setLeads(data);
     }
   };
 
@@ -115,45 +113,31 @@ const Leads = () => {
   }, [currentLead.clientType, currentLead.messageTemplate, currentLead.name, currentLead.service, currentLead.offer, currentLead.followup, showModal, isMessageEdited, currentLead]);
 
   const handleSave = async () => {
-    if (!currentLead.name || !currentLead.phone) {
-      alert("नाव आणि नंबर आवश्यक आहे!");
-      return null;
+    const form = {
+      name: currentLead.name,
+      phone: currentLead.phone,
+      status: currentLead.status,
+      followup: currentLead.followup || null,
+      clientType: currentLead.clientType
+    };
+
+    console.log("Saving to Supabase", form);
+
+    const { data, error } = await supabase
+      .from('leads')
+      .insert([form]);
+
+    if (error) {
+      alert("Save failed");
+      console.error(error);
+      return;
     }
-    
-    console.log("Saving to Supabase", currentLead);
-    
-    if (!currentLead.id) {
-      await supabase.from('leads').insert([{
-        name: currentLead.name,
-        phone: currentLead.phone,
-        status: currentLead.status,
-        followup: currentLead.followup || null,
-        clientType: currentLead.clientType,
-        source: currentLead.source || null,
-        priority: currentLead.priority || null,
-        service: currentLead.service || null,
-        offer: currentLead.offer || null,
-        notes: currentLead.notes || null
-      }]);
-    } else {
-      await supabase.from('leads').update({
-        name: currentLead.name,
-        phone: currentLead.phone,
-        status: currentLead.status,
-        followup: currentLead.followup || null,
-        clientType: currentLead.clientType,
-        source: currentLead.source || null,
-        priority: currentLead.priority || null,
-        service: currentLead.service || null,
-        offer: currentLead.offer || null,
-        notes: currentLead.notes || null
-      }).eq('id', currentLead.id);
-    }
-    
-    await fetchLeads();
+
+    alert("Saved successfully");
     setShowModal(false);
     setCurrentLead({ id: '', name: '', phone: '', status: 'New', notes: '', followup: '', lastContacted: '', clientType: 'Generic', source: 'Organic', priority: 'Warm', messageTemplate: 'Intro', service: '', offer: '', customMessage: '' });
-    return true;
+
+    fetchLeads(); // reload from DB
   };
 
   const handleDelete = async (id) => {
