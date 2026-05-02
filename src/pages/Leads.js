@@ -96,57 +96,12 @@ const Leads = () => {
   const fetchLeads = async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('leads')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      
-      if (data) {
-        console.log(`Fetched leads: ${data.length}`);
-        setLeads(data);
-      }
+      const { data } = await supabase.from('leads').select('*').order('created_at', { ascending: false });
+      setLeads(data || []);
     } catch (error) {
-      console.error('Error fetching leads from Supabase:', error);
+      console.error('Error fetching leads:', error);
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const saveLead = async (lead, isNew = false) => {
-    try {
-      const payload = {
-        id: lead.id,
-        name: lead.name,
-        phone: lead.phone,
-        status: lead.status,
-        followup: lead.followup ? lead.followup : null,
-        clientType: lead.clientType,
-        source: lead.source,
-        priority: lead.priority,
-        service: lead.service,
-        offer: lead.offer,
-        notes: lead.notes
-      };
-      
-      console.log("Saving to Supabase...");
-      let error;
-      if (isNew) {
-        const res = await supabase.from('leads').insert([payload]);
-        error = res.error;
-      } else {
-        const res = await supabase.from('leads').update(payload).eq('id', lead.id);
-        error = res.error;
-      }
-      
-      if (error) throw error;
-      console.log("Insert success");
-      return true;
-    } catch (error) {
-      console.error("Error saving lead to Supabase:", error);
-      alert("Failed to save lead: " + error.message);
-      return false;
     }
   };
 
@@ -165,40 +120,46 @@ const Leads = () => {
       return null;
     }
     
-    let leadToSave = { ...currentLead };
-    const isNew = !leadToSave.id;
+    console.log("Saving to Supabase", currentLead);
     
-    if (isNew) {
-      leadToSave.id = Date.now().toString();
-      leadToSave.date = new Date().toLocaleDateString();
+    if (!currentLead.id) {
+      await supabase.from('leads').insert([{
+        name: currentLead.name,
+        phone: currentLead.phone,
+        status: currentLead.status,
+        followup: currentLead.followup || null,
+        clientType: currentLead.clientType,
+        source: currentLead.source || null,
+        priority: currentLead.priority || null,
+        service: currentLead.service || null,
+        offer: currentLead.offer || null,
+        notes: currentLead.notes || null
+      }]);
+    } else {
+      await supabase.from('leads').update({
+        name: currentLead.name,
+        phone: currentLead.phone,
+        status: currentLead.status,
+        followup: currentLead.followup || null,
+        clientType: currentLead.clientType,
+        source: currentLead.source || null,
+        priority: currentLead.priority || null,
+        service: currentLead.service || null,
+        offer: currentLead.offer || null,
+        notes: currentLead.notes || null
+      }).eq('id', currentLead.id);
     }
     
-    const success = await saveLead(leadToSave, isNew);
-    
-    if (success) {
-      alert("Lead saved successfully!");
-      if (isNew) {
-        setLeads(prev => [leadToSave, ...prev]);
-      } else {
-        setLeads(prev => prev.map(l => l.id === leadToSave.id ? leadToSave : l));
-      }
-      setShowModal(false);
-      setCurrentLead({ id: '', name: '', phone: '', status: 'New', notes: '', followup: '', lastContacted: '', clientType: 'Generic', source: 'Organic', priority: 'Warm', messageTemplate: 'Intro', service: '', offer: '', customMessage: '' });
-      return leadToSave;
-    }
-    return null;
+    await fetchLeads();
+    setShowModal(false);
+    setCurrentLead({ id: '', name: '', phone: '', status: 'New', notes: '', followup: '', lastContacted: '', clientType: 'Generic', source: 'Organic', priority: 'Warm', messageTemplate: 'Intro', service: '', offer: '', customMessage: '' });
+    return true;
   };
 
   const handleDelete = async (id) => {
     if(window.confirm('Are you sure you want to delete this lead?')) {
-      try {
-        const { error } = await supabase.from('leads').delete().eq('id', id);
-        if (error) throw error;
-        setLeads(prev => prev.filter(l => l.id !== id));
-      } catch (error) {
-        console.error("Error deleting lead from Supabase:", error);
-        alert("Failed to delete lead from database.");
-      }
+      await supabase.from('leads').delete().eq('id', id);
+      await fetchLeads();
     }
   };
 
@@ -208,11 +169,11 @@ const Leads = () => {
     const encodedMessage = encodeURIComponent(message);
     
     // Auto-update last contacted
-    const updatedLead = { ...lead, lastContacted: new Date().toISOString().split('T')[0] };
-    const success = await saveLead(updatedLead, false);
-    if (success) {
-      setLeads(prev => prev.map(l => l.id === lead.id ? updatedLead : l));
-    }
+    await supabase.from('leads').update({
+      lastContacted: new Date().toISOString().split('T')[0]
+    }).eq('id', lead.id);
+    
+    await fetchLeads();
 
     window.open(`https://wa.me/${lead.phone}?text=${encodedMessage}`, '_blank');
     
@@ -222,23 +183,18 @@ const Leads = () => {
         const nextDate = new window.Date();
         nextDate.setDate(nextDate.getDate() + 3); // Default 3 days
         
-        const finalLead = { ...updatedLead, followup: nextDate.toISOString().split('T')[0] };
-        const followUpSuccess = await saveLead(finalLead, false);
-        if (followUpSuccess) {
-          setLeads(prev => prev.map(l => l.id === lead.id ? finalLead : l));
-        }
+        await supabase.from('leads').update({
+          followup: nextDate.toISOString().split('T')[0]
+        }).eq('id', lead.id);
+        
+        await fetchLeads();
       }
     }, 2000);
   };
 
   const moveLead = async (leadId, newStatus) => {
-    const leadToUpdate = leads.find(l => l.id === leadId);
-    if (!leadToUpdate) return;
-    const updatedLead = { ...leadToUpdate, status: newStatus };
-    const success = await saveLead(updatedLead, false);
-    if (success) {
-      setLeads(prev => prev.map(l => l.id === leadId ? updatedLead : l));
-    }
+    await supabase.from('leads').update({ status: newStatus }).eq('id', leadId);
+    await fetchLeads();
   };
 
   const filteredLeads = leads.filter(l => {
