@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { IndianRupee, Users, UserPlus, FileText, Calendar, MessageCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '../supabaseClient';
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -17,12 +18,17 @@ const Dashboard = () => {
   const [dueFollowUps, setDueFollowUps] = useState([]);
 
   useEffect(() => {
-    // Load data from local storage
     const history = JSON.parse(localStorage.getItem('srd_history') || '[]');
     const clients = JSON.parse(localStorage.getItem('srd_clients') || '[]');
-    const leads = JSON.parse(localStorage.getItem('srd_leads') || '[]');
 
-    let revenue = 0;
+    const fetchDashboardData = async () => {
+      try {
+        const { data: leadsData, error } = await supabase.from('leads').select('*');
+        if (error) throw error;
+        
+        const leads = leadsData || [];
+        
+        let revenue = 0;
     history.forEach(bill => {
       const subtotal = bill.items.reduce((acc, item) => acc + (Number(item.qty) * Number(item.rate)), 0);
       const tax = (subtotal * Number(bill.gst || 0)) / 100;
@@ -39,13 +45,13 @@ const Dashboard = () => {
     // Calculate due follow-ups from leads
     const today = new Date().toISOString().split('T')[0];
     const due = leads.filter(l => 
-      l.nextFollowUp && 
-      l.nextFollowUp <= today && 
+      l.followup && 
+      l.followup <= today && 
       l.status !== 'Converted' && 
       l.status !== 'Lost'
     );
     // Sort by date oldest first
-    due.sort((a, b) => new Date(a.nextFollowUp) - new Date(b.nextFollowUp));
+    due.sort((a, b) => new Date(a.followup) - new Date(b.followup));
     setDueFollowUps(due);
 
     // Mock chart data for now based on recent history or static
@@ -59,6 +65,12 @@ const Dashboard = () => {
       { name: 'Sun', revenue: 3490 },
     ];
     setChartData(data);
+      } catch (err) {
+        console.error("Error fetching dashboard data:", err);
+      }
+    };
+
+    fetchDashboardData();
   }, []);
 
   const getSmartTemplate = (lead) => {
@@ -110,22 +122,20 @@ const Dashboard = () => {
       .replace(/{name}/g, lead.name || '[नाव]')
       .replace(/{service}/g, lead.service || '[सर्व्हिस]')
       .replace(/{offer}/g, lead.offer || '[ऑफर]')
-      .replace(/{followup_date}/g, lead.nextFollowUp ? new Date(lead.nextFollowUp).toLocaleDateString() : '[तारीख]');
+      .replace(/{followup_date}/g, lead.followup ? new Date(lead.followup).toLocaleDateString() : '[तारीख]');
   };
 
-  const sendWhatsApp = (lead) => {
+  const sendWhatsApp = async (lead) => {
     const message = lead.customMessage || getSmartTemplate(lead);
     window.open(`https://wa.me/${lead.phone}?text=${encodeURIComponent(message)}`, '_blank');
     
     // Auto update last contacted in DB
-    const leads = JSON.parse(localStorage.getItem('srd_leads') || '[]');
-    const updatedLeads = leads.map(l => {
-      if(l.id === lead.id) {
-        return { ...l, lastContacted: new Date().toISOString().split('T')[0] };
-      }
-      return l;
-    });
-    localStorage.setItem('srd_leads', JSON.stringify(updatedLeads));
+    const updatedLead = { ...lead, lastContacted: new Date().toISOString().split('T')[0] };
+    try {
+      await supabase.from('leads').upsert(updatedLead);
+    } catch (error) {
+      console.error("Error updating lastContacted in Supabase:", error);
+    }
   };
 
   const kpiCards = [
@@ -199,7 +209,7 @@ const Dashboard = () => {
                   
                   <div className="flex items-center justify-between mt-2 pt-3 border-t border-slate-200/50">
                     <span className="text-[10px] font-bold text-red-500 flex items-center gap-1">
-                      <Calendar size={12} /> {new Date(lead.nextFollowUp).toLocaleDateString()}
+                      <Calendar size={12} /> {new Date(lead.followup).toLocaleDateString()}
                     </span>
                     <button 
                       onClick={() => sendWhatsApp(lead)}

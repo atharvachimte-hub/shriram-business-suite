@@ -16,7 +16,6 @@ const Leads = () => {
     followup: '', lastContacted: '', clientType: 'Generic', source: 'Organic', priority: 'Warm', messageTemplate: 'Intro', service: '', offer: '', customMessage: ''
   });
   const [isLoading, setIsLoading] = useState(true);
-  const [isSupabaseConnected, setIsSupabaseConnected] = useState(true);
 
   const getSmartTemplate = (lead) => {
     const type = lead.clientType || 'Generic';
@@ -81,16 +80,10 @@ const Leads = () => {
         if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
           setLeads(prev => {
             const exists = prev.find(l => l.id === payload.new.id);
-            let updated = exists ? prev.map(l => l.id === payload.new.id ? payload.new : l) : [payload.new, ...prev];
-            localStorage.setItem('srd_leads', JSON.stringify(updated));
-            return updated;
+            return exists ? prev.map(l => l.id === payload.new.id ? payload.new : l) : [payload.new, ...prev];
           });
         } else if (payload.eventType === 'DELETE') {
-          setLeads(prev => {
-            const updated = prev.filter(l => l.id !== payload.old.id);
-            localStorage.setItem('srd_leads', JSON.stringify(updated));
-            return updated;
-          });
+          setLeads(prev => prev.filter(l => l.id !== payload.old.id));
         }
       })
       .subscribe();
@@ -112,14 +105,9 @@ const Leads = () => {
       
       if (data) {
         setLeads(data);
-        localStorage.setItem('srd_leads', JSON.stringify(data));
-        setIsSupabaseConnected(true);
       }
     } catch (error) {
       console.error('Error fetching leads from Supabase:', error);
-      setIsSupabaseConnected(false);
-      const savedLeads = JSON.parse(localStorage.getItem('srd_leads') || '[]');
-      setLeads(savedLeads);
     } finally {
       setIsLoading(false);
     }
@@ -142,10 +130,8 @@ const Leads = () => {
       };
       const { error } = await supabase.from('leads').upsert(payload);
       if (error) throw error;
-      setIsSupabaseConnected(true);
     } catch (error) {
       console.error("Error syncing lead to Supabase:", error);
-      setIsSupabaseConnected(false);
     }
   };
 
@@ -160,7 +146,6 @@ const Leads = () => {
 
   const saveLeads = (newLeads) => {
     setLeads(newLeads);
-    localStorage.setItem('srd_leads', JSON.stringify(newLeads));
   };
 
   const handleSave = async () => {
@@ -193,10 +178,8 @@ const Leads = () => {
       try {
         const { error } = await supabase.from('leads').delete().eq('id', id);
         if (error) throw error;
-        setIsSupabaseConnected(true);
       } catch (error) {
         console.error("Error deleting lead from Supabase:", error);
-        setIsSupabaseConnected(false);
       }
     }
   };
@@ -352,15 +335,9 @@ const Leads = () => {
           </h1>
           <div className="flex items-center gap-3 mt-2">
             <p className="text-slate-400 font-bold text-xs tracking-widest uppercase">Manage Prospects & Pipeline</p>
-            {isSupabaseConnected ? (
-              <span className="bg-blue-100 text-blue-600 text-[9px] font-black uppercase px-2 py-0.5 rounded-md flex items-center gap-1 shadow-sm border border-blue-200">
-                <Cloud size={10} /> Cloud Sync Active
-              </span>
-            ) : (
-              <span className="bg-yellow-100 text-yellow-600 text-[9px] font-black uppercase px-2 py-0.5 rounded-md flex items-center gap-1 shadow-sm border border-yellow-200">
-                <CloudOff size={10} /> Offline Mode (Local Storage)
-              </span>
-            )}
+            <span className="bg-blue-100 text-blue-600 text-[9px] font-black uppercase px-2 py-0.5 rounded-md flex items-center gap-1 shadow-sm border border-blue-200">
+              <Cloud size={10} /> Cloud Sync Active
+            </span>
             <span className="bg-green-100 text-green-600 text-[9px] font-black uppercase px-2 py-0.5 rounded-md flex items-center gap-1 shadow-sm border border-green-200">
               <Database size={10} /> Backup Ready
             </span>
