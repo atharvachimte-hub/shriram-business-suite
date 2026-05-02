@@ -132,7 +132,9 @@ const Dashboard = () => {
     // Auto update last contacted in DB
     const updatedLead = { ...lead, lastContacted: new Date().toISOString().split('T')[0] };
     try {
-      await supabase.from('leads').upsert(updatedLead);
+      console.log("Updating lastContacted in Supabase...");
+      await supabase.from('leads').update(updatedLead).eq('id', updatedLead.id);
+      console.log("lastContacted updated successfully.");
     } catch (error) {
       console.error("Error updating lastContacted in Supabase:", error);
     }

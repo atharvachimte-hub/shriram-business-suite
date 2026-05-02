@@ -113,7 +113,7 @@ const Leads = () => {
     }
   };
 
-  const syncLeadToSupabase = async (lead) => {
+  const saveLead = async (lead, isNew = false) => {
     try {
       const payload = {
         id: lead.id,
@@ -128,10 +128,23 @@ const Leads = () => {
         offer: lead.offer,
         notes: lead.notes
       };
-      const { error } = await supabase.from('leads').upsert(payload);
+      
+      console.log("Saving lead to Supabase...");
+      let error;
+      if (isNew) {
+        const res = await supabase.from('leads').insert([payload]);
+        error = res.error;
+      } else {
+        const res = await supabase.from('leads').update(payload).eq('id', lead.id);
+        error = res.error;
+      }
+      
       if (error) throw error;
+      console.log("Lead successfully saved to Supabase!");
+      return true;
     } catch (error) {
-      console.error("Error syncing lead to Supabase:", error);
+      console.error("Error saving lead to Supabase:", error);
+      return false;
     }
   };
 
@@ -152,24 +165,30 @@ const Leads = () => {
     if (!currentLead.name || !currentLead.phone) return alert("नाव आणि नंबर आवश्यक आहे!");
     
     let leadToSave = { ...currentLead };
+    const isNew = !leadToSave.id;
     
-    if (!leadToSave.id) {
+    if (isNew) {
       leadToSave.id = Date.now().toString();
       leadToSave.date = new Date().toLocaleDateString();
     }
     
-    let newLeads;
-    if (currentLead.id) {
-      newLeads = leads.map(l => l.id === currentLead.id ? leadToSave : l);
+    const success = await saveLead(leadToSave, isNew);
+    
+    if (success) {
+      alert("Lead saved successfully!");
+      let newLeads;
+      if (isNew) {
+        newLeads = [leadToSave, ...leads];
+      } else {
+        newLeads = leads.map(l => l.id === leadToSave.id ? leadToSave : l);
+      }
+      
+      saveLeads(newLeads);
+      setShowModal(false);
+      setCurrentLead({ id: '', name: '', phone: '', status: 'New', notes: '', followup: '', lastContacted: '', clientType: 'Generic', source: 'Organic', priority: 'Warm', messageTemplate: 'Intro', service: '', offer: '', customMessage: '' });
     } else {
-      newLeads = [leadToSave, ...leads];
+      alert("Failed to save lead.");
     }
-    
-    saveLeads(newLeads);
-    syncLeadToSupabase(leadToSave);
-    
-    setShowModal(false);
-    setCurrentLead({ id: '', name: '', phone: '', status: 'New', notes: '', followup: '', lastContacted: '', clientType: 'Generic', source: 'Organic', priority: 'Warm', messageTemplate: 'Intro', service: '', offer: '', customMessage: '' });
   };
 
   const handleDelete = async (id) => {
@@ -193,7 +212,7 @@ const Leads = () => {
     const updatedLead = { ...lead, lastContacted: new Date().toISOString().split('T')[0] };
     const updatedLeads = leads.map(l => l.id === lead.id ? updatedLead : l);
     saveLeads(updatedLeads);
-    syncLeadToSupabase(updatedLead);
+    saveLead(updatedLead, false);
 
     window.open(`https://wa.me/${lead.phone}?text=${encodedMessage}`, '_blank');
     
@@ -206,7 +225,7 @@ const Leads = () => {
         const finalLead = { ...updatedLead, followup: nextDate.toISOString().split('T')[0] };
         const finalLeads = updatedLeads.map(l => l.id === lead.id ? finalLead : l);
         saveLeads(finalLeads);
-        syncLeadToSupabase(finalLead);
+        saveLead(finalLead, false);
       }
     }, 2000);
   };
@@ -217,7 +236,7 @@ const Leads = () => {
     const updatedLead = { ...leadToUpdate, status: newStatus };
     const newLeads = leads.map(l => l.id === leadId ? updatedLead : l);
     saveLeads(newLeads);
-    syncLeadToSupabase(updatedLead);
+    saveLead(updatedLead, false);
   };
 
   const filteredLeads = leads.filter(l => {
