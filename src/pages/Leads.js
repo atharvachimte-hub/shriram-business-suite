@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Search, Trash2, Edit, MessageCircle, Calendar, LayoutGrid, List, Download, Database } from 'lucide-react';
+import { Plus, Search, Trash2, Edit, MessageCircle, Calendar, LayoutGrid, List, Download, Database, Cloud, CloudOff, Loader2 } from 'lucide-react';
+import { supabase } from '../supabaseClient';
 
 const Leads = () => {
   const [leads, setLeads] = useState([]);
@@ -14,6 +15,8 @@ const Leads = () => {
     id: '', name: '', phone: '', status: 'New', notes: '', 
     nextFollowUp: '', lastContacted: '', clientType: 'Generic', leadSource: 'Organic', priority: 'Warm', messageTemplate: 'Intro', service: '', offer: '', customMessage: ''
   });
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSupabaseConnected, setIsSupabaseConnected] = useState(true);
 
   const getSmartTemplate = (lead) => {
     const type = lead.clientType || 'Generic';
@@ -70,9 +73,68 @@ const Leads = () => {
   const [isMessageEdited, setIsMessageEdited] = useState(false);
 
   useEffect(() => {
-    const savedLeads = JSON.parse(localStorage.getItem('srd_leads') || '[]');
-    setLeads(savedLeads);
+    fetchLeads();
+
+    const subscription = supabase
+      .channel('leads-channel')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, payload => {
+        if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+          setLeads(prev => {
+            const exists = prev.find(l => l.id === payload.new.id);
+            let updated = exists ? prev.map(l => l.id === payload.new.id ? payload.new : l) : [payload.new, ...prev];
+            localStorage.setItem('srd_leads', JSON.stringify(updated));
+            return updated;
+          });
+        } else if (payload.eventType === 'DELETE') {
+          setLeads(prev => {
+            const updated = prev.filter(l => l.id !== payload.old.id);
+            localStorage.setItem('srd_leads', JSON.stringify(updated));
+            return updated;
+          });
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(subscription);
+    };
   }, []);
+
+  const fetchLeads = async () => {
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('leads')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      
+      if (data) {
+        setLeads(data);
+        localStorage.setItem('srd_leads', JSON.stringify(data));
+        setIsSupabaseConnected(true);
+      }
+    } catch (error) {
+      console.error('Error fetching leads from Supabase:', error);
+      setIsSupabaseConnected(false);
+      const savedLeads = JSON.parse(localStorage.getItem('srd_leads') || '[]');
+      setLeads(savedLeads);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const syncLeadToSupabase = async (lead) => {
+    try {
+      const { error } = await supabase.from('leads').upsert(lead);
+      if (error) throw error;
+      setIsSupabaseConnected(true);
+    } catch (error) {
+      console.error("Error syncing lead to Supabase:", error);
+      setIsSupabaseConnected(false);
+    }
+  };
 
   useEffect(() => {
     if (showModal && !isMessageEdited) {
@@ -88,28 +150,41 @@ const Leads = () => {
     localStorage.setItem('srd_leads', JSON.stringify(newLeads));
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!currentLead.name || !currentLead.phone) return alert("नाव आणि नंबर आवश्यक आहे!");
+    
+    let leadToSave = { ...currentLead };
+    
+    if (!leadToSave.id) {
+      leadToSave.id = Date.now().toString();
+      leadToSave.date = new Date().toLocaleDateString();
+    }
     
     let newLeads;
     if (currentLead.id) {
-      newLeads = leads.map(l => l.id === currentLead.id ? currentLead : l);
+      newLeads = leads.map(l => l.id === currentLead.id ? leadToSave : l);
     } else {
-      newLeads = [{ 
-        ...currentLead, 
-        id: Date.now().toString(), 
-        date: new Date().toLocaleDateString() 
-      }, ...leads];
+      newLeads = [leadToSave, ...leads];
     }
     
     saveLeads(newLeads);
+    syncLeadToSupabase(leadToSave);
+    
     setShowModal(false);
     setCurrentLead({ id: '', name: '', phone: '', status: 'New', notes: '', nextFollowUp: '', lastContacted: '', clientType: 'Generic', leadSource: 'Organic', priority: 'Warm', messageTemplate: 'Intro', service: '', offer: '', customMessage: '' });
   };
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if(window.confirm('Are you sure you want to delete this lead?')) {
       saveLeads(leads.filter(l => l.id !== id));
+      try {
+        const { error } = await supabase.from('leads').delete().eq('id', id);
+        if (error) throw error;
+        setIsSupabaseConnected(true);
+      } catch (error) {
+        console.error("Error deleting lead from Supabase:", error);
+        setIsSupabaseConnected(false);
+      }
     }
   };
 
@@ -119,13 +194,10 @@ const Leads = () => {
     const encodedMessage = encodeURIComponent(message);
     
     // Auto-update last contacted
-    const updatedLeads = leads.map(l => {
-      if(l.id === lead.id) {
-        return { ...l, lastContacted: new Date().toISOString().split('T')[0] };
-      }
-      return l;
-    });
+    const updatedLead = { ...lead, lastContacted: new Date().toISOString().split('T')[0] };
+    const updatedLeads = leads.map(l => l.id === lead.id ? updatedLead : l);
     saveLeads(updatedLeads);
+    syncLeadToSupabase(updatedLead);
 
     window.open(`https://wa.me/${lead.phone}?text=${encodedMessage}`, '_blank');
     
@@ -135,20 +207,21 @@ const Leads = () => {
         const nextDate = new window.Date();
         nextDate.setDate(nextDate.getDate() + 3); // Default 3 days
         
-        const finalLeads = updatedLeads.map(l => {
-          if(l.id === lead.id) {
-            return { ...l, nextFollowUp: nextDate.toISOString().split('T')[0] };
-          }
-          return l;
-        });
+        const finalLead = { ...updatedLead, nextFollowUp: nextDate.toISOString().split('T')[0] };
+        const finalLeads = updatedLeads.map(l => l.id === lead.id ? finalLead : l);
         saveLeads(finalLeads);
+        syncLeadToSupabase(finalLead);
       }
     }, 2000);
   };
 
   const moveLead = (leadId, newStatus) => {
-    const newLeads = leads.map(l => l.id === leadId ? { ...l, status: newStatus } : l);
+    const leadToUpdate = leads.find(l => l.id === leadId);
+    if (!leadToUpdate) return;
+    const updatedLead = { ...leadToUpdate, status: newStatus };
+    const newLeads = leads.map(l => l.id === leadId ? updatedLead : l);
     saveLeads(newLeads);
+    syncLeadToSupabase(updatedLead);
   };
 
   const filteredLeads = leads.filter(l => {
@@ -266,9 +339,23 @@ const Leads = () => {
           </h1>
           <div className="flex items-center gap-3 mt-2">
             <p className="text-slate-400 font-bold text-xs tracking-widest uppercase">Manage Prospects & Pipeline</p>
+            {isSupabaseConnected ? (
+              <span className="bg-blue-100 text-blue-600 text-[9px] font-black uppercase px-2 py-0.5 rounded-md flex items-center gap-1 shadow-sm border border-blue-200">
+                <Cloud size={10} /> Cloud Sync Active
+              </span>
+            ) : (
+              <span className="bg-yellow-100 text-yellow-600 text-[9px] font-black uppercase px-2 py-0.5 rounded-md flex items-center gap-1 shadow-sm border border-yellow-200">
+                <CloudOff size={10} /> Offline Mode (Local Storage)
+              </span>
+            )}
             <span className="bg-green-100 text-green-600 text-[9px] font-black uppercase px-2 py-0.5 rounded-md flex items-center gap-1 shadow-sm border border-green-200">
-              <Database size={10} /> Data Backup Ready
+              <Database size={10} /> Backup Ready
             </span>
+            {isLoading && (
+              <span className="text-slate-400 flex items-center gap-1 text-[9px] font-black uppercase">
+                <Loader2 size={10} className="animate-spin" /> Fetching
+              </span>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-4">
