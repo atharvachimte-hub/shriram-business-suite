@@ -104,6 +104,7 @@ const Leads = () => {
       if (error) throw error;
       
       if (data) {
+        console.log(`Fetched leads: ${data.length}`);
         setLeads(data);
       }
     } catch (error) {
@@ -129,7 +130,7 @@ const Leads = () => {
         notes: lead.notes
       };
       
-      console.log("Saving lead to Supabase...");
+      console.log("Saving to Supabase...");
       let error;
       if (isNew) {
         const res = await supabase.from('leads').insert([payload]);
@@ -140,10 +141,11 @@ const Leads = () => {
       }
       
       if (error) throw error;
-      console.log("Lead successfully saved to Supabase!");
+      console.log("Insert success");
       return true;
     } catch (error) {
       console.error("Error saving lead to Supabase:", error);
+      alert("Failed to save lead: " + error.message);
       return false;
     }
   };
@@ -157,12 +159,11 @@ const Leads = () => {
     }
   }, [currentLead.clientType, currentLead.messageTemplate, currentLead.name, currentLead.service, currentLead.offer, currentLead.followup, showModal, isMessageEdited, currentLead]);
 
-  const saveLeads = (newLeads) => {
-    setLeads(newLeads);
-  };
-
   const handleSave = async () => {
-    if (!currentLead.name || !currentLead.phone) return alert("नाव आणि नंबर आवश्यक आहे!");
+    if (!currentLead.name || !currentLead.phone) {
+      alert("नाव आणि नंबर आवश्यक आहे!");
+      return null;
+    }
     
     let leadToSave = { ...currentLead };
     const isNew = !leadToSave.id;
@@ -176,67 +177,68 @@ const Leads = () => {
     
     if (success) {
       alert("Lead saved successfully!");
-      let newLeads;
       if (isNew) {
-        newLeads = [leadToSave, ...leads];
+        setLeads(prev => [leadToSave, ...prev]);
       } else {
-        newLeads = leads.map(l => l.id === leadToSave.id ? leadToSave : l);
+        setLeads(prev => prev.map(l => l.id === leadToSave.id ? leadToSave : l));
       }
-      
-      saveLeads(newLeads);
       setShowModal(false);
       setCurrentLead({ id: '', name: '', phone: '', status: 'New', notes: '', followup: '', lastContacted: '', clientType: 'Generic', source: 'Organic', priority: 'Warm', messageTemplate: 'Intro', service: '', offer: '', customMessage: '' });
-    } else {
-      alert("Failed to save lead.");
+      return leadToSave;
     }
+    return null;
   };
 
   const handleDelete = async (id) => {
     if(window.confirm('Are you sure you want to delete this lead?')) {
-      saveLeads(leads.filter(l => l.id !== id));
       try {
         const { error } = await supabase.from('leads').delete().eq('id', id);
         if (error) throw error;
+        setLeads(prev => prev.filter(l => l.id !== id));
       } catch (error) {
         console.error("Error deleting lead from Supabase:", error);
+        alert("Failed to delete lead from database.");
       }
     }
   };
 
-  const sendWhatsApp = (lead) => {
+  const sendWhatsApp = async (lead) => {
     const template = lead.customMessage || getSmartTemplate(lead);
     const message = template;
     const encodedMessage = encodeURIComponent(message);
     
     // Auto-update last contacted
     const updatedLead = { ...lead, lastContacted: new Date().toISOString().split('T')[0] };
-    const updatedLeads = leads.map(l => l.id === lead.id ? updatedLead : l);
-    saveLeads(updatedLeads);
-    saveLead(updatedLead, false);
+    const success = await saveLead(updatedLead, false);
+    if (success) {
+      setLeads(prev => prev.map(l => l.id === lead.id ? updatedLead : l));
+    }
 
     window.open(`https://wa.me/${lead.phone}?text=${encodedMessage}`, '_blank');
     
     // Prompt for next follow up
-    setTimeout(() => {
+    setTimeout(async () => {
       if(window.confirm('Schedule next follow-up for this lead?')) {
         const nextDate = new window.Date();
         nextDate.setDate(nextDate.getDate() + 3); // Default 3 days
         
         const finalLead = { ...updatedLead, followup: nextDate.toISOString().split('T')[0] };
-        const finalLeads = updatedLeads.map(l => l.id === lead.id ? finalLead : l);
-        saveLeads(finalLeads);
-        saveLead(finalLead, false);
+        const followUpSuccess = await saveLead(finalLead, false);
+        if (followUpSuccess) {
+          setLeads(prev => prev.map(l => l.id === lead.id ? finalLead : l));
+        }
       }
     }, 2000);
   };
 
-  const moveLead = (leadId, newStatus) => {
+  const moveLead = async (leadId, newStatus) => {
     const leadToUpdate = leads.find(l => l.id === leadId);
     if (!leadToUpdate) return;
     const updatedLead = { ...leadToUpdate, status: newStatus };
-    const newLeads = leads.map(l => l.id === leadId ? updatedLead : l);
-    saveLeads(newLeads);
-    saveLead(updatedLead, false);
+    const success = await saveLead(updatedLead, false);
+    if (success) {
+      setLeads(prev => prev.map(l => l.id === leadId ? updatedLead : l));
+    }
   };
 
   const filteredLeads = leads.filter(l => {
@@ -632,7 +634,7 @@ const Leads = () => {
             <div className="flex gap-4">
               <button onClick={() => setShowModal(false)} className="flex-1 p-4 bg-slate-100 text-slate-500 rounded-2xl font-black uppercase text-xs">Cancel</button>
               <button onClick={handleSave} className="flex-1 p-4 bg-slate-800 text-white rounded-2xl font-black uppercase text-xs shadow-lg shadow-slate-200 hover:scale-105 transition-all">Save Lead</button>
-              <button onClick={() => { handleSave(); sendWhatsApp(currentLead); }} className="flex-1 p-4 bg-green-500 text-white rounded-2xl font-black uppercase text-xs shadow-lg shadow-green-200 hover:scale-105 transition-all">Save & Send</button>
+              <button onClick={async () => { const saved = await handleSave(); if(saved) sendWhatsApp(saved); }} className="flex-1 p-4 bg-green-500 text-white rounded-2xl font-black uppercase text-xs shadow-lg shadow-green-200 hover:scale-105 transition-all">Save & Send</button>
             </div>
           </motion.div>
         </div>
