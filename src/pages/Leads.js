@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Search, Trash2, Edit, MessageCircle, Calendar, LayoutGrid, List, Download, Database } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Plus, Search, Trash2, Edit, MessageCircle, Calendar, LayoutGrid, List, Download, Database, Cloud, CloudOff, Loader2 } from 'lucide-react';
+import { supabase } from '../supabaseClient';
 
 const Leads = () => {
-  const navigate = useNavigate();
   const [leads, setLeads] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [clientTypeFilter, setClientTypeFilter] = useState('All');
@@ -13,9 +12,10 @@ const Leads = () => {
   const clientTypes = ['All', 'Real Estate', 'Digital Marketing', 'Dentist', 'Coaching', 'AI Course', 'Generic'];
   const [viewMode, setViewMode] = useState('list'); // 'list' or 'pipeline'
   const [currentLead, setCurrentLead] = useState({ 
-    id: '', name: '', phone: '', status: 'New Lead', notes: '', 
-    nextFollowUp: '', lastContacted: '', clientType: 'Generic', leadSource: 'Organic', priority: 'Warm', messageTemplate: 'Intro', service: '', offer: '', customMessage: ''
+    id: '', name: '', phone: '', status: 'New', notes: '', 
+    followup: '', lastContacted: '', clientType: 'Generic', source: 'Organic', priority: 'Warm', messageTemplate: 'Intro', service: '', offer: '', customMessage: ''
   });
+  const [isLoading, setIsLoading] = useState(true);
 
   const getSmartTemplate = (lead) => {
     const type = lead.clientType || 'Generic';
@@ -66,15 +66,42 @@ const Leads = () => {
       .replace(/{name}/g, lead.name || '[नाव]')
       .replace(/{service}/g, lead.service || '[सर्व्हिस]')
       .replace(/{offer}/g, lead.offer || '[ऑफर]')
-      .replace(/{followup_date}/g, lead.nextFollowUp ? new Date(lead.nextFollowUp).toLocaleDateString() : '[तारीख]');
+      .replace(/{followup_date}/g, lead.followup ? new Date(lead.followup).toLocaleDateString() : '[तारीख]');
   };
 
   const [isMessageEdited, setIsMessageEdited] = useState(false);
 
   useEffect(() => {
-    const savedLeads = JSON.parse(localStorage.getItem('srd_leads') || '[]');
-    setLeads(savedLeads);
+    fetchLeads();
+
+    const subscription = supabase
+      .channel('leads-channel')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, payload => {
+        if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+          setLeads(prev => {
+            const exists = prev.find(l => l.id === payload.new.id);
+            return exists ? prev.map(l => l.id === payload.new.id ? payload.new : l) : [payload.new, ...prev];
+          });
+        } else if (payload.eventType === 'DELETE') {
+          setLeads(prev => prev.filter(l => l.id !== payload.old.id));
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(subscription);
+    };
   }, []);
+
+  const fetchLeads = async () => {
+    const { data, error } = await supabase
+      .from('leads')
+      .select('*');
+
+    if (!error) {
+      setLeads(data);
+    }
+  };
 
   useEffect(() => {
     if (showModal && !isMessageEdited) {
@@ -83,128 +110,75 @@ const Leads = () => {
         setCurrentLead(prev => ({ ...prev, customMessage: newMsg }));
       }
     }
-  }, [currentLead.clientType, currentLead.messageTemplate, currentLead.name, currentLead.service, currentLead.offer, currentLead.nextFollowUp, showModal, isMessageEdited, currentLead]);
+  }, [currentLead.clientType, currentLead.messageTemplate, currentLead.name, currentLead.service, currentLead.offer, currentLead.followup, showModal, isMessageEdited, currentLead]);
 
-  const saveLeads = (newLeads) => {
-    setLeads(newLeads);
-    localStorage.setItem('srd_leads', JSON.stringify(newLeads));
-  };
+  const handleSave = async () => {
+    const form = {
+      name: currentLead.name,
+      phone: currentLead.phone,
+      status: currentLead.status,
+      followup: currentLead.followup || null,
+      clientType: currentLead.clientType
+    };
 
-  const handleStatusChangeSideEffects = (lead, newStatus, oldStatus) => {
-    if (newStatus === oldStatus) return;
-    
-    if (newStatus === 'Proposal Sent') {
-      if (window.confirm(`Create a Proposal/Quotation draft for ${lead.name}?`)) {
-        const draft = JSON.parse(localStorage.getItem('srd_pro_db') || '{}');
-        const newDraft = {
-          ...draft,
-          name: lead.name,
-          company: lead.notes || lead.name,
-          phone: lead.phone,
-          address: '',
-          gst: draft.gst || '0',
-          docId: `QT-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
-          items: [{ desc: lead.service || 'Digital Marketing Services', qty: 1, rate: 0 }],
-          date: new Date().toISOString().split('T')[0]
-        };
-        localStorage.setItem('srd_pro_db', JSON.stringify(newDraft));
-        navigate('/quotations');
-      }
-    } else if (newStatus === 'Won') {
-      const clients = JSON.parse(localStorage.getItem('srd_clients') || '[]');
-      const clientExists = clients.some(c => c.phone === lead.phone);
-      if (!clientExists) {
-        if (window.confirm(`Convert ${lead.name} into an Active Client?`)) {
-          const newClient = {
-            id: Date.now().toString(),
-            name: lead.name,
-            company: lead.notes || `${lead.name} Agency Client`,
-            phone: lead.phone,
-            address: '',
-            gst: '',
-            clientType: lead.clientType || 'Generic',
-            dateAdded: new Date().toLocaleDateString()
-          };
-          clients.push(newClient);
-          localStorage.setItem('srd_clients', JSON.stringify(clients));
-          alert(`Client created successfully! 🎉`);
-        }
-      }
+    console.log("Saving to Supabase", form);
+
+    const { data, error } = await supabase
+      .from('leads')
+      .insert([form]);
+
+    if (error) {
+      alert("Save failed");
+      console.error(error);
+      return;
     }
-  };
 
-  const handleSave = () => {
-    if (!currentLead.name || !currentLead.phone) return alert("नाव आणि नंबर आवश्यक आहे!");
-    
-    let newLeads;
-    const oldLead = leads.find(l => l.id === currentLead.id);
-    const oldStatus = oldLead ? oldLead.status : null;
-    
-    if (currentLead.id) {
-      newLeads = leads.map(l => l.id === currentLead.id ? currentLead : l);
-    } else {
-      newLeads = [{ 
-        ...currentLead, 
-        id: Date.now().toString(), 
-        date: new Date().toLocaleDateString() 
-      }, ...leads];
-    }
-    
-    saveLeads(newLeads);
+    alert("Saved successfully");
     setShowModal(false);
-    
-    const savedLead = currentLead.id ? currentLead : newLeads[0];
-    handleStatusChangeSideEffects(savedLead, currentLead.status, oldStatus);
-    
-    setCurrentLead({ id: '', name: '', phone: '', status: 'New Lead', notes: '', nextFollowUp: '', lastContacted: '', clientType: 'Generic', leadSource: 'Organic', priority: 'Warm', messageTemplate: 'Intro', service: '', offer: '', customMessage: '' });
+    setCurrentLead({ id: '', name: '', phone: '', status: 'New', notes: '', followup: '', lastContacted: '', clientType: 'Generic', source: 'Organic', priority: 'Warm', messageTemplate: 'Intro', service: '', offer: '', customMessage: '' });
+
+    fetchLeads(); // reload from DB
   };
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if(window.confirm('Are you sure you want to delete this lead?')) {
-      saveLeads(leads.filter(l => l.id !== id));
+      await supabase.from('leads').delete().eq('id', id);
+      await fetchLeads();
     }
   };
 
-  const sendWhatsApp = (lead) => {
+  const sendWhatsApp = async (lead) => {
     const template = lead.customMessage || getSmartTemplate(lead);
     const message = template;
     const encodedMessage = encodeURIComponent(message);
     
     // Auto-update last contacted
-    const updatedLeads = leads.map(l => {
-      if(l.id === lead.id) {
-        return { ...l, lastContacted: new Date().toISOString().split('T')[0] };
-      }
-      return l;
-    });
-    saveLeads(updatedLeads);
+    await supabase.from('leads').update({
+      lastContacted: new Date().toISOString().split('T')[0]
+    }).eq('id', lead.id);
+    
+    await fetchLeads();
 
     window.open(`https://wa.me/${lead.phone}?text=${encodedMessage}`, '_blank');
     
     // Prompt for next follow up
-    setTimeout(() => {
+    setTimeout(async () => {
       if(window.confirm('Schedule next follow-up for this lead?')) {
         const nextDate = new window.Date();
         nextDate.setDate(nextDate.getDate() + 3); // Default 3 days
         
-        const finalLeads = updatedLeads.map(l => {
-          if(l.id === lead.id) {
-            return { ...l, nextFollowUp: nextDate.toISOString().split('T')[0] };
-          }
-          return l;
-        });
-        saveLeads(finalLeads);
+        await supabase.from('leads').update({
+          followup: nextDate.toISOString().split('T')[0]
+        }).eq('id', lead.id);
+        
+        await fetchLeads();
       }
     }, 2000);
   };
 
-  const moveLead = (leadId, newStatus) => {
-    const lead = leads.find(l => l.id === leadId);
-    if (!lead) return;
-    const oldStatus = lead.status;
-    const newLeads = leads.map(l => l.id === leadId ? { ...l, status: newStatus } : l);
-    saveLeads(newLeads);
-    handleStatusChangeSideEffects(lead, newStatus, oldStatus);
+  const moveLead = async (leadId, newStatus) => {
+    await supabase.from('leads').update({ status: newStatus }).eq('id', leadId);
+    await fetchLeads();
   };
 
   const filteredLeads = leads.filter(l => {
@@ -215,7 +189,7 @@ const Leads = () => {
 
   const handleExportCSV = (data, prefix) => {
     if (data.length === 0) return alert('No leads to export');
-    const headers = ['name', 'phone', 'status', 'nextFollowUp', 'clientType', 'leadSource', 'priority', 'service', 'offer', 'notes'];
+    const headers = ['name', 'phone', 'status', 'followup', 'clientType', 'source', 'priority', 'service', 'offer', 'notes'];
     const csvContent = [
       headers.join(','),
       ...data.map(lead => headers.map(header => `"${String(lead[header] || '').replace(/"/g, '""')}"`).join(','))
@@ -242,17 +216,15 @@ const Leads = () => {
 
   const getStatusColor = (status) => {
     switch(status) {
-      case 'New Lead': return 'bg-blue-100 text-blue-600 border-blue-200';
-      case 'Contacted': return 'bg-purple-100 text-purple-600 border-purple-200';
-      case 'Interested': return 'bg-yellow-100 text-yellow-600 border-yellow-200';
-      case 'Proposal Sent': return 'bg-orange-100 text-orange-600 border-orange-200';
-      case 'Won': return 'bg-green-100 text-green-600 border-green-200';
+      case 'New': return 'bg-blue-100 text-blue-600 border-blue-200';
+      case 'Contacted': return 'bg-yellow-100 text-yellow-600 border-yellow-200';
+      case 'Converted': return 'bg-green-100 text-green-600 border-green-200';
       case 'Lost': return 'bg-red-100 text-red-600 border-red-200';
       default: return 'bg-slate-100 text-slate-600 border-slate-200';
     }
   };
 
-  const stages = ['New Lead', 'Contacted', 'Interested', 'Proposal Sent', 'Won', 'Lost'];
+  const stages = ['New', 'Contacted', 'Converted', 'Lost'];
 
   const renderTable = (leadsData) => (
     <div className="overflow-x-auto bg-white rounded-2xl shadow-sm border border-slate-50">
@@ -290,9 +262,9 @@ const Leads = () => {
                   </span>
                 </td>
                 <td className="py-4 px-4">
-                  {lead.nextFollowUp ? (
+                  {lead.followup ? (
                     <div className="flex items-center gap-2 text-xs font-bold text-orange-600 bg-orange-50 px-3 py-1 rounded-lg w-max">
-                      <Calendar size={12} /> {new Date(lead.nextFollowUp).toLocaleDateString()}
+                      <Calendar size={12} /> {new Date(lead.followup).toLocaleDateString()}
                     </div>
                   ) : <span className="text-xs font-bold text-slate-400">-</span>}
                 </td>
@@ -324,9 +296,17 @@ const Leads = () => {
           </h1>
           <div className="flex items-center gap-3 mt-2">
             <p className="text-slate-400 font-bold text-xs tracking-widest uppercase">Manage Prospects & Pipeline</p>
-            <span className="bg-green-100 text-green-600 text-[9px] font-black uppercase px-2 py-0.5 rounded-md flex items-center gap-1 shadow-sm border border-green-200">
-              <Database size={10} /> Data Backup Ready
+            <span className="bg-blue-100 text-blue-600 text-[9px] font-black uppercase px-2 py-0.5 rounded-md flex items-center gap-1 shadow-sm border border-blue-200">
+              <Cloud size={10} /> Cloud Sync Active
             </span>
+            <span className="bg-green-100 text-green-600 text-[9px] font-black uppercase px-2 py-0.5 rounded-md flex items-center gap-1 shadow-sm border border-green-200">
+              <Database size={10} /> Backup Ready
+            </span>
+            {isLoading && (
+              <span className="text-slate-400 flex items-center gap-1 text-[9px] font-black uppercase">
+                <Loader2 size={10} className="animate-spin" /> Fetching
+              </span>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-4">
@@ -353,7 +333,7 @@ const Leads = () => {
             </button>
           </div>
           <button 
-            onClick={() => { setIsMessageEdited(false); setCurrentLead({ id: '', name: '', phone: '', status: 'New Lead', notes: '', nextFollowUp: '', lastContacted: '', clientType: 'Generic', leadSource: 'Organic', priority: 'Warm', messageTemplate: 'Intro', service: '', offer: '', customMessage: '' }); setShowModal(true); }}
+            onClick={() => { setIsMessageEdited(false); setCurrentLead({ id: '', name: '', phone: '', status: 'New', notes: '', followup: '', lastContacted: '', clientType: 'Generic', source: 'Organic', priority: 'Warm', messageTemplate: 'Intro', service: '', offer: '', customMessage: '' }); setShowModal(true); }}
             className="bg-orange-600 text-white px-6 py-3 rounded-2xl text-xs font-black flex items-center gap-2 shadow-lg shadow-orange-200 uppercase hover:scale-105 transition-all"
           >
             <Plus size={16} /> New Lead
@@ -470,9 +450,9 @@ const Leads = () => {
                       </div>
                       <p className="text-xs font-bold text-slate-500 mb-3">{lead.phone}</p>
                       
-                      {lead.nextFollowUp && (
+                      {lead.followup && (
                         <div className="flex items-center gap-1 text-[10px] font-black text-orange-600 bg-orange-50 px-2 py-1 rounded-lg mb-4 w-max">
-                          <Calendar size={10} /> Due: {new Date(lead.nextFollowUp).toLocaleDateString()}
+                          <Calendar size={10} /> Due: {new Date(lead.followup).toLocaleDateString()}
                         </div>
                       )}
 
@@ -524,7 +504,7 @@ const Leads = () => {
               </div>
               <div>
                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Next Follow-up Date</label>
-                <input type="date" value={currentLead.nextFollowUp} onChange={e => setCurrentLead({...currentLead, nextFollowUp: e.target.value})} className="w-full p-4 rounded-2xl bg-slate-50 border-none outline-none font-bold text-slate-500" />
+                <input type="date" value={currentLead.followup} onChange={e => setCurrentLead({...currentLead, followup: e.target.value})} className="w-full p-4 rounded-2xl bg-slate-50 border-none outline-none font-bold text-slate-500" />
               </div>
             </div>
 
@@ -537,7 +517,7 @@ const Leads = () => {
               </div>
               <div>
                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Lead Source</label>
-                <select value={currentLead.leadSource} onChange={e => setCurrentLead({...currentLead, leadSource: e.target.value})} className="w-full p-4 rounded-2xl bg-slate-50 border-none outline-none font-bold appearance-none">
+                <select value={currentLead.source} onChange={e => setCurrentLead({...currentLead, source: e.target.value})} className="w-full p-4 rounded-2xl bg-slate-50 border-none outline-none font-bold appearance-none">
                   {['Meta Ads', 'WhatsApp', 'Referral', 'Organic', 'Outreach'].map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
@@ -594,7 +574,7 @@ const Leads = () => {
             <div className="flex gap-4">
               <button onClick={() => setShowModal(false)} className="flex-1 p-4 bg-slate-100 text-slate-500 rounded-2xl font-black uppercase text-xs">Cancel</button>
               <button onClick={handleSave} className="flex-1 p-4 bg-slate-800 text-white rounded-2xl font-black uppercase text-xs shadow-lg shadow-slate-200 hover:scale-105 transition-all">Save Lead</button>
-              <button onClick={() => { handleSave(); sendWhatsApp(currentLead); }} className="flex-1 p-4 bg-green-500 text-white rounded-2xl font-black uppercase text-xs shadow-lg shadow-green-200 hover:scale-105 transition-all">Save & Send</button>
+              <button onClick={async () => { const saved = await handleSave(); if(saved) sendWhatsApp(saved); }} className="flex-1 p-4 bg-green-500 text-white rounded-2xl font-black uppercase text-xs shadow-lg shadow-green-200 hover:scale-105 transition-all">Save & Send</button>
             </div>
           </motion.div>
         </div>
