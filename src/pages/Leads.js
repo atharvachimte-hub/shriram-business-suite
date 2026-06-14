@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Plus, Search, Trash2, Edit, MessageCircle, Calendar, LayoutGrid, List, Download, Database } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const Leads = () => {
+  const navigate = useNavigate();
   const [leads, setLeads] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [clientTypeFilter, setClientTypeFilter] = useState('All');
@@ -11,7 +13,7 @@ const Leads = () => {
   const clientTypes = ['All', 'Real Estate', 'Digital Marketing', 'Dentist', 'Coaching', 'AI Course', 'Generic'];
   const [viewMode, setViewMode] = useState('list'); // 'list' or 'pipeline'
   const [currentLead, setCurrentLead] = useState({ 
-    id: '', name: '', phone: '', status: 'New', notes: '', 
+    id: '', name: '', phone: '', status: 'New Lead', notes: '', 
     nextFollowUp: '', lastContacted: '', clientType: 'Generic', leadSource: 'Organic', priority: 'Warm', messageTemplate: 'Intro', service: '', offer: '', customMessage: ''
   });
 
@@ -88,10 +90,56 @@ const Leads = () => {
     localStorage.setItem('srd_leads', JSON.stringify(newLeads));
   };
 
+  const handleStatusChangeSideEffects = (lead, newStatus, oldStatus) => {
+    if (newStatus === oldStatus) return;
+    
+    if (newStatus === 'Proposal Sent') {
+      if (window.confirm(`Create a Proposal/Quotation draft for ${lead.name}?`)) {
+        const draft = JSON.parse(localStorage.getItem('srd_pro_db') || '{}');
+        const newDraft = {
+          ...draft,
+          name: lead.name,
+          company: lead.notes || lead.name,
+          phone: lead.phone,
+          address: '',
+          gst: draft.gst || '0',
+          docId: `QT-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
+          items: [{ desc: lead.service || 'Digital Marketing Services', qty: 1, rate: 0 }],
+          date: new Date().toISOString().split('T')[0]
+        };
+        localStorage.setItem('srd_pro_db', JSON.stringify(newDraft));
+        navigate('/quotations');
+      }
+    } else if (newStatus === 'Won') {
+      const clients = JSON.parse(localStorage.getItem('srd_clients') || '[]');
+      const clientExists = clients.some(c => c.phone === lead.phone);
+      if (!clientExists) {
+        if (window.confirm(`Convert ${lead.name} into an Active Client?`)) {
+          const newClient = {
+            id: Date.now().toString(),
+            name: lead.name,
+            company: lead.notes || `${lead.name} Agency Client`,
+            phone: lead.phone,
+            address: '',
+            gst: '',
+            clientType: lead.clientType || 'Generic',
+            dateAdded: new Date().toLocaleDateString()
+          };
+          clients.push(newClient);
+          localStorage.setItem('srd_clients', JSON.stringify(clients));
+          alert(`Client created successfully! 🎉`);
+        }
+      }
+    }
+  };
+
   const handleSave = () => {
     if (!currentLead.name || !currentLead.phone) return alert("नाव आणि नंबर आवश्यक आहे!");
     
     let newLeads;
+    const oldLead = leads.find(l => l.id === currentLead.id);
+    const oldStatus = oldLead ? oldLead.status : null;
+    
     if (currentLead.id) {
       newLeads = leads.map(l => l.id === currentLead.id ? currentLead : l);
     } else {
@@ -104,7 +152,11 @@ const Leads = () => {
     
     saveLeads(newLeads);
     setShowModal(false);
-    setCurrentLead({ id: '', name: '', phone: '', status: 'New', notes: '', nextFollowUp: '', lastContacted: '', clientType: 'Generic', leadSource: 'Organic', priority: 'Warm', messageTemplate: 'Intro', service: '', offer: '', customMessage: '' });
+    
+    const savedLead = currentLead.id ? currentLead : newLeads[0];
+    handleStatusChangeSideEffects(savedLead, currentLead.status, oldStatus);
+    
+    setCurrentLead({ id: '', name: '', phone: '', status: 'New Lead', notes: '', nextFollowUp: '', lastContacted: '', clientType: 'Generic', leadSource: 'Organic', priority: 'Warm', messageTemplate: 'Intro', service: '', offer: '', customMessage: '' });
   };
 
   const handleDelete = (id) => {
@@ -147,8 +199,12 @@ const Leads = () => {
   };
 
   const moveLead = (leadId, newStatus) => {
+    const lead = leads.find(l => l.id === leadId);
+    if (!lead) return;
+    const oldStatus = lead.status;
     const newLeads = leads.map(l => l.id === leadId ? { ...l, status: newStatus } : l);
     saveLeads(newLeads);
+    handleStatusChangeSideEffects(lead, newStatus, oldStatus);
   };
 
   const filteredLeads = leads.filter(l => {
@@ -186,15 +242,17 @@ const Leads = () => {
 
   const getStatusColor = (status) => {
     switch(status) {
-      case 'New': return 'bg-blue-100 text-blue-600 border-blue-200';
-      case 'Contacted': return 'bg-yellow-100 text-yellow-600 border-yellow-200';
-      case 'Converted': return 'bg-green-100 text-green-600 border-green-200';
+      case 'New Lead': return 'bg-blue-100 text-blue-600 border-blue-200';
+      case 'Contacted': return 'bg-purple-100 text-purple-600 border-purple-200';
+      case 'Interested': return 'bg-yellow-100 text-yellow-600 border-yellow-200';
+      case 'Proposal Sent': return 'bg-orange-100 text-orange-600 border-orange-200';
+      case 'Won': return 'bg-green-100 text-green-600 border-green-200';
       case 'Lost': return 'bg-red-100 text-red-600 border-red-200';
       default: return 'bg-slate-100 text-slate-600 border-slate-200';
     }
   };
 
-  const stages = ['New', 'Contacted', 'Converted', 'Lost'];
+  const stages = ['New Lead', 'Contacted', 'Interested', 'Proposal Sent', 'Won', 'Lost'];
 
   const renderTable = (leadsData) => (
     <div className="overflow-x-auto bg-white rounded-2xl shadow-sm border border-slate-50">
@@ -295,7 +353,7 @@ const Leads = () => {
             </button>
           </div>
           <button 
-            onClick={() => { setIsMessageEdited(false); setCurrentLead({ id: '', name: '', phone: '', status: 'New', notes: '', nextFollowUp: '', lastContacted: '', clientType: 'Generic', leadSource: 'Organic', priority: 'Warm', messageTemplate: 'Intro', service: '', offer: '', customMessage: '' }); setShowModal(true); }}
+            onClick={() => { setIsMessageEdited(false); setCurrentLead({ id: '', name: '', phone: '', status: 'New Lead', notes: '', nextFollowUp: '', lastContacted: '', clientType: 'Generic', leadSource: 'Organic', priority: 'Warm', messageTemplate: 'Intro', service: '', offer: '', customMessage: '' }); setShowModal(true); }}
             className="bg-orange-600 text-white px-6 py-3 rounded-2xl text-xs font-black flex items-center gap-2 shadow-lg shadow-orange-200 uppercase hover:scale-105 transition-all"
           >
             <Plus size={16} /> New Lead
