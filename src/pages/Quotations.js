@@ -889,41 +889,66 @@ Thank you for choosing *${myProfile.company}*! Please let us know if you have an
       <style>
         {`
           @media print {
-            .no-print { display: none !important; }
-            body { 
-              background: white !important; 
-              margin: 0 !important; 
-              padding: 0 !important; 
-              overflow: visible !important;
+            /* 1. Hide everything by default */
+            body * {
+              visibility: hidden;
             }
-            /* Force the fixed overlay into normal document flow for print */
-            .fixed {
-              position: static !important;
-              display: block !important;
-              overflow: visible !important;
+
+            /* 2. Show only the quotation print area and its children */
+            #print-area,
+            #print-area * {
+              visibility: visible !important;
+            }
+
+            /* 3. Reset body for clean print */
+            body {
               background: white !important;
-              padding: 0 !important;
-            }
-            .print-container { 
-              box-shadow: none !important; 
-              border: none !important; 
-              border-radius: 0 !important;
-              width: 100% !important; 
-              max-width: 100% !important; 
-              position: static !important; 
               margin: 0 !important;
               padding: 0 !important;
               overflow: visible !important;
             }
-            #print-area { 
-              width: 100% !important; 
+
+            /* 4. Hide sidebar and CRM navigation completely */
+            nav, .w-64, [class*="sidebar"], .no-print {
+              display: none !important;
+            }
+
+            /* 5. Force all ancestors of #print-area into normal flow */
+            #root,
+            #root > *,
+            #root > * > *,
+            #root > * > * > *,
+            #root > * > * > * > *,
+            #root > * > * > * > * > * {
+              position: static !important;
+              overflow: visible !important;
+              margin: 0 !important;
+              padding: 0 !important;
+              width: 100% !important;
+              max-width: 100% !important;
+              display: block !important;
+              background: white !important;
+              border: none !important;
+              box-shadow: none !important;
+              min-height: 0 !important;
+              height: auto !important;
+              margin-left: 0 !important;
+              border-radius: 0 !important;
+            }
+
+            /* 6. Style the quotation print area */
+            #print-area {
+              width: 100% !important;
               padding: 6mm 4mm !important;
               overflow: visible !important;
             }
+
             #print-area img {
               max-width: 100% !important;
               page-break-inside: avoid;
             }
+
+            /* 7. A4 page setup */
             @page { size: A4; margin: 12mm 10mm; }
           }
           
