@@ -890,7 +890,20 @@ Thank you for choosing *${myProfile.company}*! Please let us know if you have an
         {`
           @media print {
             .no-print { display: none !important; }
-            body { background: white !important; margin: 0; padding: 0; }
+            body { 
+              background: white !important; 
+              margin: 0 !important; 
+              padding: 0 !important; 
+              overflow: visible !important;
+            }
+            /* Force the fixed overlay into normal document flow for print */
+            .fixed {
+              position: static !important;
+              display: block !important;
+              overflow: visible !important;
+              background: white !important;
+              padding: 0 !important;
+            }
             .print-container { 
               box-shadow: none !important; 
               border: none !important; 
@@ -900,10 +913,12 @@ Thank you for choosing *${myProfile.company}*! Please let us know if you have an
               position: static !important; 
               margin: 0 !important;
               padding: 0 !important;
+              overflow: visible !important;
             }
             #print-area { 
               width: 100% !important; 
-              padding: 8mm 5mm !important;
+              padding: 6mm 4mm !important;
+              overflow: visible !important;
             }
             #print-area img {
               max-width: 100% !important;
