@@ -894,20 +894,22 @@ Thank you for choosing *${myProfile.company}*! Please let us know if you have an
             .print-container { 
               box-shadow: none !important; 
               border: none !important; 
+              border-radius: 0 !important;
               width: 100% !important; 
               max-width: 100% !important; 
-              position: absolute !important; 
-              top: 0 !important; 
-              left: 0 !important;
+              position: static !important; 
               margin: 0 !important;
               padding: 0 !important;
             }
             #print-area { 
               width: 100% !important; 
-              padding: 20px !important;
-              zoom: 0.95; 
+              padding: 8mm 5mm !important;
             }
-            @page { size: A4; margin: 10mm; }
+            #print-area img {
+              max-width: 100% !important;
+              page-break-inside: avoid;
+            }
+            @page { size: A4; margin: 12mm 10mm; }
           }
           
           /* Font styles for Cursive typing signatures */
