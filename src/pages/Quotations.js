@@ -38,8 +38,8 @@ const Quotations = () => {
     companyFull: "SHRIRAM DIGITAL SOLUTIONS",
     owner: "Atharva Chimte",
     location: "Pune, Maharashtra",
-    email: "contact@shriramdigital.com",
-    phone: "+91 9876543210"
+    email: "shriramdigitalsolution79@gmail.com",
+    phone: "+91 9860726613"
   };
 
   const [clientData, setClientData] = useState(() => {
